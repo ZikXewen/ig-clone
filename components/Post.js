@@ -8,8 +8,43 @@ import {
 } from "@heroicons/react/outline";
 import { HeartIcon as HeartSolidIcon } from "@heroicons/react/solid";
 import { useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
+import {
+  addDoc,
+  collection,
+  serverTimestamp,
+  query,
+  orderBy,
+  onSnapshot,
+} from "@firebase/firestore";
+import { db } from "../firebase";
+import ReactTimeAgo from "react-time-ago";
 export default ({ id, username, userImg, img, caption }) => {
   const { data: session } = useSession();
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState("");
+  const sendComment = async (e) => {
+    e.preventDefault();
+    const commentToSend = newComment;
+    setNewComment("");
+    await addDoc(collection(db, "posts", id, "comments"), {
+      comment: commentToSend,
+      username: session.user.username,
+      userImage: session.user.image,
+      timestamp: serverTimestamp(),
+    });
+  };
+  useEffect(
+    () =>
+      onSnapshot(
+        query(
+          collection(db, "posts", id, "comments"),
+          orderBy("timestamp", "desc")
+        ),
+        (snapshot) => setComments(snapshot.docs)
+      ),
+    [db]
+  );
   return (
     <div className="bg-white my-7 border rounded-sm">
       {/* Header */}
@@ -41,6 +76,30 @@ export default ({ id, username, userImg, img, caption }) => {
         {caption}
       </p>
       {/* Comments */}
+      {Boolean(comments.length) && (
+        <div className="ml-5 max-h-20 mb-5 overflow-y-scroll scrollbar-thumb-black scrollbar-thin">
+          {comments.map((comment) => (
+            <div key={comment.id} className="flex space-x-2 items-center mb-3">
+              <img
+                src={comment.data().userImage}
+                className="h-7 rounded-full"
+              />
+              <p className="text-sm flex-1">
+                <span className="font-bold">{comment.data().username}</span>{" "}
+                {comment.data().comment}
+              </p>
+              {comment.data().timestamp && (
+                <ReactTimeAgo
+                  date={comment.data().timestamp.toDate()}
+                  locale="en-US"
+                  timeStyle="round-minute"
+                  className="pr-5 text-xs"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       {/* Input Box */}
       {session && (
         <form className="flex items-center p-4">
@@ -49,8 +108,17 @@ export default ({ id, username, userImg, img, caption }) => {
             type="text"
             placeholder="Add a comment..."
             className="border-none flex-1 focus:ring-0 outline-none"
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
           />
-          <button className="font-semibold text-blue-400">Post</button>
+          <button
+            type="submit"
+            className="font-semibold text-blue-400"
+            disabled={!newComment.trim()}
+            onClick={sendComment}
+          >
+            Post
+          </button>
         </form>
       )}
     </div>
